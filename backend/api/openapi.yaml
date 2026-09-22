@@ -3,6 +3,8 @@ info: { title: SmartEstate API, version: 1.0.0 }
 paths:
   /healthz: { get: { summary: Health check } }
   /api/v1/auth/login: { post: { summary: Login } }
-  /api/v1/repairs: { get: { summary: List repairs }, post: { summary: Create repair } }
+  /api/v1/repairs: { get: { summary: List repairs (query: status, overdue=1 筛选响应超时工单), parameters: [{name: status, in: query, schema: {type: string}}, {name: overdue, in: query, schema: {type: string, enum: ['1', 'true']}}] }, post: { summary: Create repair (body 可选 urgency: 普通|紧急|重大，默认普通；自动生成 response_deadline) } }
+  /api/v1/repairs/{id}/assign: { patch: { summary: 物业首次接单，记录 responded_at 与 response_duration；重复接单、非物业、已结束工单返回 400 } }
+  /api/v1/repairs/{id}/status: { patch: { summary: 物业更新进度；非物业或已结束工单返回 400 } }
   /api/v1/payments: { get: { summary: List payments }, post: { summary: Create bill } }
   /api/v1/announcements: { get: { summary: List announcements }, post: { summary: Publish announcement } }

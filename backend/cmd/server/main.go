@@ -25,7 +25,13 @@ func main() {
 	if err = db.AutoMigrate(&model.User{}, &model.Repair{}, &model.Payment{}, &model.Announcement{}, &model.AnnouncementRead{}, &model.OperationLog{}, &model.Role{}, &model.Permission{}, &model.RolePermission{}); err != nil {
 		log.Fatal(err)
 	}
+	if err = backfillRepairSLA(db); err != nil {
+		log.Fatal(err)
+	}
 	if err = seed(db); err != nil {
+		log.Fatal(err)
+	}
+	if err = backfillRepairSLA(db); err != nil {
 		log.Fatal(err)
 	}
 	logger := util.NewLogger()
@@ -46,6 +52,46 @@ func openDB(c config.Config) (*gorm.DB, error) {
 	}
 	return gorm.Open(sqlite.Open(c.DSN), &gorm.Config{})
 }
+
+// backfillRepairSLA 为升级前创建的工单补齐紧急等级、首次响应截止时间和响应耗时，
+// 使历史数据与新数据一样支持超时筛选与回读。
+func backfillRepairSLA(db *gorm.DB) error {
+	var repairs []model.Repair
+	if e := db.Where("urgency = '' OR urgency IS NULL OR response_deadline IS NULL").Find(&repairs).Error; e != nil {
+		return e
+	}
+	for i := range repairs {
+		r := &repairs[i]
+		changed := false
+		if !constants.ValidRepairUrgencies[r.Urgency] {
+			r.Urgency = constants.RepairUrgencyNormal
+			changed = true
+		}
+		if r.ResponseDeadline == nil {
+			d := r.CreatedAt.Add(constants.RepairResponseWindow[r.Urgency])
+			r.ResponseDeadline = &d
+			changed = true
+		}
+		if r.RespondedAt == nil && r.HandlerID != nil {
+			t := r.UpdatedAt
+			r.RespondedAt = &t
+			dur := int64(t.Sub(r.CreatedAt).Seconds())
+			r.ResponseDuration = &dur
+			changed = true
+		}
+		if changed {
+			if e := db.Model(&model.Repair{}).Where("id = ?", r.ID).Updates(map[string]any{
+				"urgency":           r.Urgency,
+				"response_deadline": r.ResponseDeadline,
+				"responded_at":      r.RespondedAt,
+				"response_duration": r.ResponseDuration,
+			}).Error; e != nil {
+				return e
+			}
+		}
+	}
+	return nil
+}
 func seed(db *gorm.DB) error {
 	var n int64
 	if e := db.Model(&model.User{}).Count(&n).Error; e != nil {
@@ -62,7 +108,7 @@ func seed(db *gorm.DB) error {
 	if e = db.Create(&users).Error; e != nil {
 		return e
 	}
-	if e = db.Create(&model.Repair{UserID: users[0].ID, Title: "客厅灯具闪烁", Description: "晚间开灯时出现闪烁，请安排师傅检查。", Type: "水电", Status: constants.RepairStatusPending}).Error; e != nil {
+	if e = db.Create(&model.Repair{UserID: users[0].ID, Title: "客厅灯具闪烁", Description: "晚间开灯时出现闪烁，请安排师傅检查。", Type: "水电", Status: constants.RepairStatusPending, Urgency: constants.RepairUrgencyNormal}).Error; e != nil {
 		return e
 	}
 	if e = db.Create(&model.Payment{UserID: users[0].ID, FeeType: "物业费", Amount: 268.50, Month: "2026-08", Status: "unpaid"}).Error; e != nil {

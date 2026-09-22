@@ -16,7 +16,7 @@ func NewRepairHandler(s *service.RepairService, h *Handler) *RepairHandler {
 	return &RepairHandler{Handler: *h, svc: s}
 }
 func (h *RepairHandler) List(c *gin.Context) {
-	v, e := h.svc.List(c.Query("status"))
+	v, e := h.svc.List(c.Query("status"), c.Query("overdue"))
 	if e != nil {
 		Fail(c, 500, 50001, e.Error())
 		return
@@ -28,7 +28,7 @@ func (h *RepairHandler) Create(c *gin.Context) {
 	if !Bind(c, &r, h.Validate) {
 		return
 	}
-	v, e := h.svc.Create(c.GetUint("userID"), r.Title, r.Description, r.Type, r.Images)
+	v, e := h.svc.Create(c.GetUint("userID"), r.Title, r.Description, r.Type, r.Images, r.Urgency)
 	if e != nil {
 		Fail(c, 500, 50001, e.Error())
 		return

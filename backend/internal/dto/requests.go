@@ -15,6 +15,7 @@ type CreateRepairRequest struct {
 	Title       string `json:"title" validate:"required,min=2,max=100"`
 	Description string `json:"description" validate:"required,min=5"`
 	Type        string `json:"type" validate:"required,oneof=水电 家具 公共设施 其他"`
+	Urgency     string `json:"urgency" validate:"omitempty,oneof=普通 紧急 重大"`
 	Images      string `json:"images"`
 }
 type AssignRepairRequest struct {

@@ -19,7 +19,7 @@ docker compose up -d
 ## 主要功能
 
 - **物业工作台**：汇总待办报修、本月已收费用和近期公告。
-- **报修管理**：业主创建水电/家具/公共设施等报修；物业筛选、分配和更新进度。
+- **报修管理**：业主创建水电/家具/公共设施等报修，提交时选择紧急等级（普通/紧急/重大，默认普通，分别要求 24h/8h/2h 内首次响应）；物业首次接单记录响应时间与耗时，超时工单列表标红并可按超时筛选、分配处理人和更新进度，重复接单、非物业操作或已结束工单变更都会被拒绝。
 - **费用缴纳**：按业主展示账单，通过支付宝沙箱模拟完成支付和记录查询。
 - **社区公告**：置顶、发布、详情查看与阅读计数。
 - **个人中心**：更新昵称、头像 URL，并绑定楼栋、单元和房间。
@@ -68,9 +68,9 @@ cd backend && go build ./...
 | POST | `/auth/login` | 登录（限流） |
 | GET/PUT | `/users/me` | 获取或更新个人资料 |
 | GET | `/users/staff` | 获取处理人员，`repair:manage` |
-| GET/POST | `/repairs` | 工单列表 / 创建工单 |
-| PATCH | `/repairs/:id/assign` | 分配处理人，`repair:manage` |
-| PATCH | `/repairs/:id/status` | 更新进度，`repair:manage` |
+| GET/POST | `/repairs` | 工单列表（支持 `status` 与 `overdue=true/false` 筛选） / 创建工单（`priority` 默认 `normal`） |
+| PATCH | `/repairs/:id/assign` | 物业首次接单并记录响应时间，`repair:manage`；重复接单/已结束工单拒绝 |
+| PATCH | `/repairs/:id/status` | 更新进度，`repair:manage`；已完成/已关闭工单拒绝变更 |
 | GET/POST | `/payments` | 账单列表 / 生成账单 |
 | POST | `/payments/:id/pay` | 模拟支付（限流） |
 | GET/POST | `/announcements` | 公告列表 / 发布，发布需 `announcement:publish` |
@@ -119,6 +119,13 @@ OpenAPI 摘要位于 `backend/api/openapi.yaml`。
 - 后端使用：`backend/internal/service/repair_service.go` 状态机、`backend/internal/handler/repair_handler.go` DTO 校验、`backend/internal/constants/log_templates.go`、`backend/internal/util/formatter.go`。
 - 前端定义：`frontend/src/constants/repair.ts`、`frontend/src/types/index.ts`。
 - 前端使用：`frontend/src/components/common/RepairStatusBadge.vue`、`RepairCard.vue`、`frontend/src/pages/Repairs.vue` 的筛选器、`frontend/src/api/repair.ts`、`frontend/src/hooks/useRepairStats.ts`。
+
+### RepairPriority
+
+- 后端定义：`backend/internal/constants/repair.go`（`normal`/`urgent`/`major` 及 24h/8h/2h 时限表 `RepairResponseDeadlines`、终态表 `RepairFinalStatuses`）；数据库 `Repair.priority`；模型 `backend/internal/model/repair.go`（含 `response_due_at`、`response_at`、`response_duration`、非持久化的 `overdue`）。
+- 后端使用：`backend/internal/service/repair_service.go` 截止时间计算、首次接单、超时判定与拒绝规则，`backend/internal/handler/repair_handler.go` DTO 与 `overdue` 查询参数，`backend/internal/dto/requests.go` 校验，`backend/internal/util/formatter.go` 等级与耗时文本，`backend/internal/constants/log_templates.go`，`cmd/server/main.go` 历史数据回填。
+- 前端定义：`frontend/src/constants/repair.ts`（等级、响应时限与耗时格式化）、`frontend/src/types/index.ts`。
+- 前端使用：`frontend/src/components/common/RepairCard.vue`（等级标签、截止/响应时间、耗时、超时标红、接单与进度操作）、`frontend/src/pages/Repairs.vue`（提交等级单选与超时筛选）、`frontend/src/api/repair.ts`、`frontend/src/stores/repairStore.ts`。
 
 ### UserRole
 

@@ -16,6 +16,7 @@ type CreateRepairRequest struct {
 	Description string `json:"description" validate:"required,min=5"`
 	Type        string `json:"type" validate:"required,oneof=水电 家具 公共设施 其他"`
 	Images      string `json:"images"`
+	Priority    string `json:"priority" validate:"omitempty,oneof=normal urgent major"`
 }
 type AssignRepairRequest struct {
 	HandlerID uint `json:"handler_id" validate:"required"`

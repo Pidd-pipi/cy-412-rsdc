@@ -1,10 +1,11 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/smartestate/smartestate/internal/dto"
 	"github.com/smartestate/smartestate/internal/service"
-	"strconv"
 )
 
 type RepairHandler struct {
@@ -16,7 +17,9 @@ func NewRepairHandler(s *service.RepairService, h *Handler) *RepairHandler {
 	return &RepairHandler{Handler: *h, svc: s}
 }
 func (h *RepairHandler) List(c *gin.Context) {
-	v, e := h.svc.List(c.Query("status"))
+	overdueRaw := c.Query("overdue")
+	overdueOnly, _ := strconv.ParseBool(overdueRaw)
+	v, e := h.svc.List(c.Query("status"), overdueRaw != "", overdueOnly)
 	if e != nil {
 		Fail(c, 500, 50001, e.Error())
 		return
@@ -28,7 +31,7 @@ func (h *RepairHandler) Create(c *gin.Context) {
 	if !Bind(c, &r, h.Validate) {
 		return
 	}
-	v, e := h.svc.Create(c.GetUint("userID"), r.Title, r.Description, r.Type, r.Images)
+	v, e := h.svc.Create(c.GetUint("userID"), r.Title, r.Description, r.Type, r.Images, r.Priority)
 	if e != nil {
 		Fail(c, 500, 50001, e.Error())
 		return

@@ -13,6 +13,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"log"
+	"math"
 	"time"
 )
 
@@ -23,6 +24,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if err = db.AutoMigrate(&model.User{}, &model.Repair{}, &model.Payment{}, &model.Announcement{}, &model.AnnouncementRead{}, &model.OperationLog{}, &model.Role{}, &model.Permission{}, &model.RolePermission{}); err != nil {
+		log.Fatal(err)
+	}
+	if err = backfillRepairSLA(db); err != nil {
 		log.Fatal(err)
 	}
 	if err = seed(db); err != nil {
@@ -62,7 +66,7 @@ func seed(db *gorm.DB) error {
 	if e = db.Create(&users).Error; e != nil {
 		return e
 	}
-	if e = db.Create(&model.Repair{UserID: users[0].ID, Title: "客厅灯具闪烁", Description: "晚间开灯时出现闪烁，请安排师傅检查。", Type: "水电", Status: constants.RepairStatusPending}).Error; e != nil {
+	if e = db.Create(&model.Repair{UserID: users[0].ID, Title: "客厅灯具闪烁", Description: "晚间开灯时出现闪烁，请安排师傅检查。", Type: "水电", Status: constants.RepairStatusPending, Priority: constants.RepairPriorityNormal, ResponseDueAt: ptrTime(time.Now().Add(constants.RepairResponseDeadlines[constants.RepairPriorityNormal]))}).Error; e != nil {
 		return e
 	}
 	if e = db.Create(&model.Payment{UserID: users[0].ID, FeeType: "物业费", Amount: 268.50, Month: "2026-08", Status: "unpaid"}).Error; e != nil {
@@ -77,5 +81,38 @@ func seed(db *gorm.DB) error {
 		}
 	}
 	fmt.Print("")
+	return nil
+}
+
+func ptrTime(t time.Time) *time.Time { return &t }
+
+// backfillRepairSLA 为历史工单补齐紧急等级与首次响应截止时间，并对已接单但缺少耗时的记录补算耗时。
+func backfillRepairSLA(db *gorm.DB) error {
+	var rows []model.Repair
+	if e := db.Where("priority = '' OR priority IS NULL OR response_due_at IS NULL OR (response_at IS NOT NULL AND response_duration = 0)").Find(&rows).Error; e != nil {
+		return e
+	}
+	for i := range rows {
+		v := &rows[i]
+		changed := false
+		if !constants.ValidRepairPriorities[v.Priority] {
+			v.Priority = constants.RepairPriorityNormal
+			changed = true
+		}
+		if v.ResponseDueAt == nil {
+			due := v.CreatedAt.Add(constants.RepairResponseDeadlines[v.Priority])
+			v.ResponseDueAt = &due
+			changed = true
+		}
+		if v.ResponseDueAt != nil && v.RespondedAt != nil && v.ResponseDuration == 0 {
+			v.ResponseDuration = int64(math.Ceil(v.RespondedAt.Sub(v.CreatedAt).Seconds()))
+			changed = true
+		}
+		if changed {
+			if e := db.Model(&model.Repair{}).Where("id = ?", v.ID).Updates(map[string]any{"priority": v.Priority, "response_due_at": v.ResponseDueAt, "response_duration": v.ResponseDuration}).Error; e != nil {
+				return e
+			}
+		}
+	}
 	return nil
 }

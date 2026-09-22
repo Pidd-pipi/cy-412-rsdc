@@ -1,8 +1,24 @@
 openapi: 3.0.3
-info: { title: SmartEstate API, version: 1.0.0 }
+info: { title: SmartEstate API, version: 1.1.0 }
 paths:
   /healthz: { get: { summary: Health check } }
   /api/v1/auth/login: { post: { summary: Login } }
-  /api/v1/repairs: { get: { summary: List repairs }, post: { summary: Create repair } }
+  /api/v1/repairs:
+    get:
+      summary: List repairs
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [pending, assigned, processing, done, closed] } }
+        - { name: overdue, in: query, required: false, schema: { type: boolean }, description: 仅返回首次响应超时（true）或未超时（false）的工单 }
+    post:
+      summary: Create repair
+      description: priority 取 normal/urgent/major，默认 normal；分别要求 24h/8h/2h 内首次响应。
+  /api/v1/repairs/{id}/assign:
+    patch:
+      summary: 物业首次接单
+      description: 记录首次响应时间与耗时；重复接单、非物业处理人或已结束工单均被拒绝，原记录不变。
+  /api/v1/repairs/{id}/status:
+    patch:
+      summary: 更新工单进度
+      description: 已完成/已关闭工单的任何变更均被拒绝。
   /api/v1/payments: { get: { summary: List payments }, post: { summary: Create bill } }
   /api/v1/announcements: { get: { summary: List announcements }, post: { summary: Publish announcement } }
